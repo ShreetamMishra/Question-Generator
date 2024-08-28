@@ -5,6 +5,7 @@ import axios from 'axios';
 
 function QuestionPage() {
   const [generatedQA, setGeneratedQA] = React.useState([]);
+  console.log(generatedQA);
   const navigate = useNavigate(); 
 
   const handleFormSubmit = async (inputText, testType, noOfQues) => {
@@ -16,7 +17,8 @@ function QuestionPage() {
       });
       setGeneratedQA(response.data.cresults);
 
-      navigate(`/generated?data=${encodeURIComponent(JSON.stringify(response.data.cresults))}`);
+      // Navigate to /generated and pass the data using the state object
+      navigate('/generated', { state: { data: response.data.cresults } });
     } catch (error) {
       console.error('There was an error generating the test data!', error);
     }
