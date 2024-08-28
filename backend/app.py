@@ -4,7 +4,7 @@ from objective import ObjectiveTest
 from subjective import SubjectiveTest
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS to allow requests from your frontend
+CORS(app) 
 
 app.secret_key = 'aica2'
 
@@ -15,7 +15,7 @@ def index():
 @app.route('/test_generate', methods=["POST"])
 def test_generate():
     if request.method == "POST":
-        data = request.json  # Use request.json for JSON payload
+        data = request.json  
         inputText = data.get("itext")
         testType = data.get("test_type")
         noOfQues = int(data.get("noq"))

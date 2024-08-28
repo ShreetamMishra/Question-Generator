@@ -5,11 +5,11 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import printJS from 'print-js';
 import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from 'pdfmake/build/vfs_fonts';  // Make sure to include the pdf fonts
+import pdfFonts from 'pdfmake/build/vfs_fonts';  
 import './App.css';
 import GeneratedQA from './GeneratedQA';
 
-pdfMake.vfs = pdfFonts.pdfMake.vfs;  // Set the virtual file system for pdfmake
+pdfMake.vfs = pdfFonts.pdfMake.vfs; 
 
 function GeneratedPage() {
   const location = useLocation();
@@ -29,7 +29,7 @@ function GeneratedPage() {
   ];
 
   const handlePrint = () => {
-    // Convert generatedQA data to HTML format for printing
+
     const printContent = `
       <html>
       <head>
@@ -62,7 +62,7 @@ function GeneratedPage() {
       </html>
     `;
 
-    // Print the content
+  
     printJS({ printable: printContent, type: 'raw-html' });
   };
   const handleExportCSV = () => {

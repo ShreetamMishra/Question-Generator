@@ -1,15 +1,25 @@
 import re
-import nltk
 import spacy
 import numpy as np
 from nltk.corpus import wordnet as wn
 
 class ObjectiveTest:
     def __init__(self, data, noOfQues):
-        self.summary = data
+        self.summary = self.remove_bracketed_text(data)  
         self.noOfQues = noOfQues
         self.nlp = spacy.load("en_core_web_md")
-        self.common_words = set(["the", "a", "an", "this", "that", "these", "those", "in", "on", "at", "for", "with"])
+        
+       
+        common_words = {"the", "a", "an", "this", "that", "these", "those", "in", "on", "at", "for", "with"}
+        pronouns = {"I", "me", "you", "he", "him", "she", "her", "it", "we", "us", "they", "them", "my", "your", 
+                    "his", "its", "our", "their", "mine", "yours", "hers", "ours", "theirs"}
+        
+        
+        self.common_words = common_words.union(word.capitalize() for word in common_words)
+        self.pronouns = pronouns.union(word.capitalize() for word in pronouns)
+
+    def remove_bracketed_text(self, text):
+         return re.sub(r'\(.*?[-_=+*!%$@)]', '', text)
 
     def get_trivial_sentences(self):
         doc = self.nlp(self.summary)
@@ -21,18 +31,36 @@ class ObjectiveTest:
         return trivial_sentences
 
     def identify_trivial_sentences(self, sentence):
-        noun_phrases = [chunk.text for chunk in sentence.noun_chunks]
+        noun_phrases = [chunk.text for chunk in sentence.noun_chunks 
+                        if not self.contains_pronouns(chunk.text) and not self.is_common_word(chunk.text)]
         
-        if len(noun_phrases) == 0 or len(sentence) < 5:
+        if not noun_phrases or len(sentence) < 5:
             return None
         
-        replace_phrase = noun_phrases[0]
         
-        if len(replace_phrase.split()) < 2 and replace_phrase.islower():
-            return None
+        sentence_tokens = [token.text for token in sentence]
         
-        blanks_phrase = "__________"
-        sentence_text = sentence.text.replace(replace_phrase, blanks_phrase, 1)
+      
+        middle_index = len(sentence_tokens) // 2
+        for i, token in enumerate(sentence_tokens):
+            if token in noun_phrases:
+                replace_phrase = token
+                break
+        else:
+            replace_phrase = noun_phrases[0]
+
+        replace_index = sentence_tokens.index(replace_phrase)
+        
+
+        if replace_index <= middle_index:
+            for i in range(middle_index + 1, len(sentence_tokens)):
+                if sentence_tokens[i] in noun_phrases:
+                    replace_phrase = sentence_tokens[i]
+                    replace_index = sentence_tokens.index(replace_phrase)
+                    break
+        
+        sentence_tokens[replace_index] = "__________"
+        sentence_text = ' '.join(sentence_tokens)
 
         trivial = {
             "Question": sentence_text,
@@ -41,67 +69,62 @@ class ObjectiveTest:
         }
         return trivial
 
+    def contains_pronouns(self, phrase):
+        return any(word in self.pronouns for word in phrase.split())
+
+    def is_common_word(self, text):
+        return text.lower() in self.common_words or text in self.common_words
+
     def answer_options(self, word):
-        similar_words = set()
         token = self.nlp(word)[0]
+        similar_words = set()
+
 
         if token.has_vector:
-            for similar in token.vocab:
-                if token.similarity(similar) > 0.5 and similar.is_alpha and similar.lower_ != word.lower():
-                    similar_words.add(similar.lower_)
+            similar_words = {similar.lower_ for similar in token.vocab 
+                             if token.similarity(similar) > 0.5 and similar.is_alpha and similar.lower_ != word.lower()}
+
 
         synsets = wn.synsets(word, pos="n")
         if synsets:
             hypernym = synsets[0].hypernyms()[0] if synsets[0].hypernyms() else None
             if hypernym:
-                for hyponym in hypernym.hyponyms():
-                    similar_word = hyponym.lemmas()[0].name().replace("_", " ")
-                    if similar_word != word:
-                        similar_words.add(similar_word)
+                similar_words.update(hyponym.lemmas()[0].name().replace("_", " ") for hyponym in hypernym.hyponyms())
 
-        similar_words = similar_words - self.common_words
+        similar_words -= self.common_words
         return list(similar_words)[:4] if similar_words else ["No similar options available"]
-    
-    # def generate_false_statement(self, sentence):
-    #         # This method will slightly alter a sentence to generate a false statement.
-    #         altered_sentence = sentence
-            
-    #         # Randomly select a word to alter (like a name, year, or keyword).
-    #         doc = self.nlp(sentence)
-    #         for token in doc:
-    #             if token.ent_type_ in ["PERSON", "ORG", "DATE"] or token.pos_ in ["NOUN", "PROPN", "NUM"]:
-    #                 if token.ent_type_ == "DATE" and token.like_num:
-    #                     # Change the year by a small amount
-    #                     altered_sentence = sentence.replace(token.text, str(int(token.text) + np.random.choice([-1, 1, 5, -5])))
-    #                 elif token.ent_type_ == "PERSON" or token.ent_type_ == "ORG":
-    #                     # Replace the entity with a similar one from WordNet
-    #                     similar = self.answer_options(token.text)
-    #                     if similar:
-    #                         altered_sentence = sentence.replace(token.text, similar[0])
-    #                 break  
 
+    def contains_number(self, sentence):
+        return any(char.isdigit() for char in sentence)
 
+    def increment_number(self, sentence):
+        def increment_match(match):
+            number = int(match.group())
+            return str(number + 1)
+        
+        return re.sub(r'\d+', increment_match, sentence)
+
+    def generate_false_statement(self, sentence):
+        if self.contains_number(sentence):
+            return self.increment_number(sentence)
+        return sentence
 
     def generate_true_false(self, sentence):
-        # Return the original sentence as the true/false question with a "True" answer.
-        return {"Question": sentence, "Answer": "True"}
+        if np.random.choice([True, False]):
+            return {"Question": sentence, "Answer": "True"}
+        else:
+            false_statement = self.generate_false_statement(sentence)
+            return {"Question": false_statement, "Answer": "False"}
 
     def generate_test(self):
-        questions = []
-        answers = []
-
         trivial_pairs = self.get_trivial_sentences()
         question_types = ["fill-in-the-blank", "true-false"]
+        questions, answers = [], []
 
-        for i in range(min(int(self.noOfQues), len(trivial_pairs))):
+        for i in range(min(self.noOfQues, len(trivial_pairs))):
             q_type = np.random.choice(question_types)
-            if q_type == "fill-in-the-blank":
-                qa = trivial_pairs[i]["trivial"]
-                questions.append(qa["Question"])
-                answers.append(qa["Answer"])
-            elif q_type == "true-false":
-                qa = self.generate_true_false(trivial_pairs[i]["original"])
-                questions.append(qa["Question"])
-                answers.append(qa["Answer"])
+            qa = trivial_pairs[i]["trivial"] if q_type == "fill-in-the-blank" else self.generate_true_false(trivial_pairs[i]["original"])
+            questions.append(qa["Question"])
+            answers.append(qa["Answer"])
 
         return questions, answers
